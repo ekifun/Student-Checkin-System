@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkin-backend
+  labels:
+    app: checkin-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: checkin-backend
+  template:
+    metadata:
+      labels:
+        app: checkin-backend
+    spec:
+      containers:
+      - name: checkin-backend
+        image: johnliu17/checkin-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          value: "production"
+

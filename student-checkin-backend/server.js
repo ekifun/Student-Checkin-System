@@ -147,5 +147,5 @@ app.get('/teacher/checkin-status', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Server listening at http://192.168.1.73:${port}`);
+  console.log(`Server running on port ${port}`);
 });
