@@ -1,10 +1,9 @@
-// --- server.js (Persist registration/checkin data with history support) ---
+// --- server.js (with full support for registration, checkin/checkout, and date-safe teacher view) ---
 const express = require('express');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const port = 3001;
@@ -22,7 +21,10 @@ CREATE TABLE IF NOT EXISTS students (
   name TEXT NOT NULL,
   grade TEXT NOT NULL,
   father_name TEXT,
-  mother_name TEXT
+  mother_name TEXT,
+  phone_number TEXT,
+  wechat_id TEXT,
+  email TEXT
 );
 
 CREATE TABLE IF NOT EXISTS checkins (
@@ -41,23 +43,55 @@ CREATE TABLE IF NOT EXISTS checkouts (
   FOREIGN KEY(student_id) REFERENCES students(id)
 );
 `;
-
 db.exec(initSQL);
+
+// Safe migration for existing DB
+const addColumnIfMissing = (column, type) => {
+  db.all("PRAGMA table_info(students);", (err, columns) => {
+    if (!columns.some(col => col.name === column)) {
+      db.run(`ALTER TABLE students ADD COLUMN ${column} ${type}`);
+    }
+  });
+};
+
+addColumnIfMissing("phone_number", "TEXT");
+addColumnIfMissing("wechat_id", "TEXT");
+addColumnIfMissing("email", "TEXT");
 
 function findStudent(name, callback) {
   db.get('SELECT * FROM students WHERE name = ?', [name], callback);
 }
 
 app.post('/register', (req, res) => {
-  const { student_name, grade, father_name, mother_name } = req.body;
+  const {
+    student_name, grade, father_name, mother_name,
+    phone_number, wechat_id, email
+  } = req.body;
+
   db.run(
-    `INSERT INTO students (name, grade, father_name, mother_name) VALUES (?, ?, ?, ?)`,
-    [student_name, grade, father_name, mother_name],
+    `INSERT INTO students 
+     (name, grade, father_name, mother_name, phone_number, wechat_id, email) 
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [student_name, grade, father_name, mother_name, phone_number, wechat_id, email],
     function (err) {
       if (err) return res.status(500).send({ error: err.message });
-      res.send({ id: this.lastID });
+      res.send({ success: true, id: this.lastID });
     }
   );
+});
+
+app.get('/students', (req, res) => {
+  db.all(`SELECT * FROM students ORDER BY grade ASC, name ASC`, [], (err, rows) => {
+    if (err) return res.status(500).send({ error: err.message });
+
+    const groupedByGrade = rows.reduce((acc, student) => {
+      if (!acc[student.grade]) acc[student.grade] = [];
+      acc[student.grade].push(student);
+      return acc;
+    }, {});
+
+    res.send(groupedByGrade);
+  });
 });
 
 app.post('/checkin', (req, res) => {
@@ -69,7 +103,7 @@ app.post('/checkin', (req, res) => {
       [student.id, time, parent_name],
       function (err) {
         if (err) return res.status(500).send({ error: err.message });
-        res.send({ id: this.lastID });
+        res.send({ success: true, id: this.lastID });
       }
     );
   });
@@ -84,40 +118,38 @@ app.post('/checkout', (req, res) => {
       [student.id, time, parent_name],
       function (err) {
         if (err) return res.status(500).send({ error: err.message });
-        res.send({ id: this.lastID });
+        res.send({ success: true, id: this.lastID });
       }
     );
   });
 });
 
-// Teacher checkin overview for specific date
 app.get('/teacher/checkin-status', (req, res) => {
   const date = req.query.date;
   if (!date) return res.status(400).send({ error: 'Missing date query parameter' });
 
-  const start = new Date(`${date}T00:00:00`).toISOString();
-  const end = new Date(`${date}T23:59:59.999`).toISOString();
+  const datePrefix = `${date}%`; // e.g., "2025-05-28%"
 
   const checkinQuery = `
     SELECT student_id, MAX(time) as time, checked_in_by
     FROM checkins
-    WHERE time BETWEEN ? AND ?
+    WHERE time LIKE ?
     GROUP BY student_id
   `;
 
   const checkoutQuery = `
     SELECT student_id, MAX(time) as time, checked_out_by
     FROM checkouts
-    WHERE time BETWEEN ? AND ?
+    WHERE time LIKE ?
     GROUP BY student_id
   `;
 
   db.serialize(() => {
-    db.all(checkinQuery, [start, end], (err, checkins) => {
+    db.all(checkinQuery, [datePrefix], (err, checkins) => {
       if (err) return res.status(500).send({ error: err.message });
       const checkinMap = Object.fromEntries(checkins.map(c => [c.student_id, c]));
 
-      db.all(checkoutQuery, [start, end], (err, checkouts) => {
+      db.all(checkoutQuery, [datePrefix], (err, checkouts) => {
         if (err) return res.status(500).send({ error: err.message });
         const checkoutMap = Object.fromEntries(checkouts.map(c => [c.student_id, c]));
 
@@ -126,12 +158,18 @@ app.get('/teacher/checkin-status', (req, res) => {
           const result = students.map(s => {
             const ci = checkinMap[s.id];
             const co = checkoutMap[s.id];
-            const status = ci ? (co && co.time > ci.time ? 'Checked Out' : 'Checked In') : 'Not Checked In';
+            const status = ci
+              ? (co && co.time > ci.time ? 'Checked Out' : 'Checked In')
+              : 'Not Checked In';
             return {
+              id: s.id,
               student_name: s.name,
               grade: s.grade,
               father_name: s.father_name,
               mother_name: s.mother_name,
+              phone_number: s.phone_number,
+              wechat_id: s.wechat_id,
+              email: s.email,
               status,
               checkin_time: ci?.time || null,
               checked_in_by: ci?.checked_in_by || null,
@@ -146,6 +184,10 @@ app.get('/teacher/checkin-status', (req, res) => {
   });
 });
 
-app.listen(port, () => {
+app.get('/', (req, res) => {
+  res.send('Check-in System Backend is Running.');
+});
+
+app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
 });
