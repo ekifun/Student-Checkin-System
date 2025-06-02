@@ -12,6 +12,7 @@ import axios from 'axios';
 import { Picker } from '@react-native-picker/picker';
 
 const API_BASE = 'http://a3428ac49451640ffb9d0f66968d8224-344899087.us-west-1.elb.amazonaws.com';
+const GRADE_OPTIONS = ['7+', '<3', 'Prek', 'K-3', '4-6'];
 
 export default function App() {
   const [students, setStudents] = useState([]);
@@ -36,8 +37,8 @@ export default function App() {
     }
   };
 
-  const handleAction = (studentId, type) => {
-    setActiveStudentId(studentId);
+  const handleAction = (student, type) => {
+    setActiveStudentId(student.id);
     setActionType(type);
     setSelectedParent('');
   };
@@ -47,19 +48,28 @@ export default function App() {
       await axios.post(`${API_BASE}/${actionType}`, {
         student_name: student.student_name,
         parent_name: parentName,
+        grade: student.grade,
         time: new Date().toISOString(),
       });
+  
+      if (actionType === 'checkin') {
+        // If re-checkin, optimistically reset checkout fields in frontend before refresh
+        student.checkout_time = null;
+        student.checked_out_by = null;
+      }
+  
       Alert.alert('Success', `${actionType} recorded for ${student.student_name}.`);
       setActiveStudentId(null);
-      fetchStudents(); // Refresh list
+      await fetchStudents(); // Ensures UI reflects backend truth
     } catch (err) {
       Alert.alert('Error', 'Failed to submit action.');
     }
   };
+  
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Grade Selection Modal */}
+      {/* Grade Picker Modal */}
       <Modal visible={showGradePicker} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -69,12 +79,9 @@ export default function App() {
               onValueChange={(value) => setGrade(value)}
             >
               <Picker.Item label="Select Grade..." value="" />
-              <Picker.Item label="Grade 1" value="1" />
-              <Picker.Item label="Grade 2" value="2" />
-              <Picker.Item label="Grade 3" value="3" />
-              <Picker.Item label="Grade 4" value="4" />
-              <Picker.Item label="Grade 5" value="5" />
-              <Picker.Item label="Grade 6" value="6" />
+              {GRADE_OPTIONS.map((option) => (
+                <Picker.Item key={option} label={option} value={option} />
+              ))}
             </Picker>
             <Button
               title="Confirm"
@@ -87,26 +94,42 @@ export default function App() {
         </View>
       </Modal>
 
-      {/* Student Check-In/Check-Out List */}
+      {/* Student List */}
       <ScrollView contentContainerStyle={styles.container}>
         {grade && <Text style={styles.header}>Grade {grade} - {today}</Text>}
-        {students.map(student => (
+        <Button title="🔄 Refresh Status" onPress={fetchStudents} />
+
+        {students.map((student) => (
           <View key={student.id} style={styles.card}>
             <Text style={styles.name}>{student.student_name}</Text>
             <Text>Status: {student.status}</Text>
             {student.checkin_time && (
-              <Text>Check-In: {new Date(student.checkin_time).toLocaleTimeString()} by {student.checked_in_by}</Text>
+              <Text>
+                Check-In: {new Date(student.checkin_time).toLocaleTimeString()} by {student.checked_in_by}
+              </Text>
             )}
             {student.checkout_time && (
-              <Text>Check-Out: {new Date(student.checkout_time).toLocaleTimeString()} by {student.checked_out_by}</Text>
+              <Text>
+                Check-Out: {new Date(student.checkout_time).toLocaleTimeString()} by {student.checked_out_by}
+              </Text>
             )}
 
             <View style={styles.btnGroup}>
-              <Button title="Check-In" onPress={() => handleAction(student.student_name, 'checkin')} />
-              <Button title="Check-Out" onPress={() => handleAction(student.student_name, 'checkout')} />
+              <Button
+                title="Check-In"
+                onPress={() => handleAction(student, 'checkin')}
+                disabled={student.status !== 'Not Checked In' && student.status !== 'Checked Out'}
+                color={student.status === 'Not Checked In' || student.status === 'Checked Out' ? 'green' : 'gray'}
+              />
+              <Button
+                title="Check-Out"
+                onPress={() => handleAction(student, 'checkout')}
+                disabled={student.status !== 'Checked In'}
+                color={student.status === 'Checked In' ? 'orange' : 'gray'}
+              />
             </View>
 
-            {activeStudentId === student.student_name && (
+            {activeStudentId === student.id && (
               <View style={styles.pickerContainer}>
                 <Text>Select Parent:</Text>
                 <Picker
