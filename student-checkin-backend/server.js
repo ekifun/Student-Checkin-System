@@ -1,19 +1,20 @@
+// server.js using SQLite (zero-cost deployment)
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const ExcelJS = require('exceljs');
 
 const app = express();
 const port = 3001;
-const dbFile = path.resolve(__dirname, 'checkin-system.db');
 
 app.use(cors());
 app.use(bodyParser.json());
 
+// SQLite DB file location
+const dbFile = path.resolve(__dirname, 'data', 'checkin-system.db');
 const db = new sqlite3.Database(dbFile);
-
-const ExcelJS = require('exceljs');
 
 // Initialize tables
 const initSQL = `
@@ -46,92 +47,84 @@ CREATE TABLE IF NOT EXISTS checkouts (
 `;
 db.exec(initSQL);
 
-// Safe migrations
-const addColumnIfMissing = (column, type) => {
-  db.all("PRAGMA table_info(students);", (err, columns) => {
-    if (!columns.some(col => col.name === column)) {
-      db.run(`ALTER TABLE students ADD COLUMN ${column} ${type}`);
-    }
-  });
-};
-addColumnIfMissing("phone_number", "TEXT");
-addColumnIfMissing("wechat_id", "TEXT");
-addColumnIfMissing("email", "TEXT");
-
-// Updated function: match by name AND grade
-function findStudentByName(name, grade, callback) {
-  db.get('SELECT * FROM students WHERE name = ? AND grade = ?', [name, grade], callback);
-}
-
-// --- Registration ---
+// Registration with duplicate handling
 app.post('/register', (req, res) => {
   const {
     student_name, grade, father_name, mother_name,
     phone_number, wechat_id, email
   } = req.body;
 
-  db.run(
-    `INSERT INTO students 
-     (name, grade, father_name, mother_name, phone_number, wechat_id, email) 
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [student_name, grade, father_name, mother_name, phone_number, wechat_id, email],
-    function (err) {
+  db.all(
+    'SELECT * FROM students WHERE grade = ? AND name LIKE ?',
+    [grade, `${student_name}%`],
+    (err, rows) => {
       if (err) return res.status(500).send({ error: err.message });
-      res.send({ success: true, id: this.lastID });
+
+      const exactMatch = rows.find(
+        s => s.name === student_name &&
+             s.father_name === father_name &&
+             s.mother_name === mother_name
+      );
+      if (exactMatch) {
+        return res.status(400).send({ error: `${student_name} was already registered.` });
+      }
+
+      let finalName = student_name;
+      if (rows.length > 0) {
+        finalName = `${student_name} (${father_name})`;
+      }
+
+      db.run(
+        `INSERT INTO students 
+         (name, grade, father_name, mother_name, phone_number, wechat_id, email)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [finalName, grade, father_name, mother_name, phone_number, wechat_id, email],
+        function(err) {
+          if (err) return res.status(500).send({ error: err.message });
+          res.send({ success: true, id: this.lastID });
+        }
+      );
     }
   );
 });
 
-// --- Check-In ---
+// Check-in
 app.post('/checkin', (req, res) => {
-  const { student_name, parent_name, grade, time } = req.body;
-  const dateOnly = time.split('T')[0]; // Extract date
+  const { student_id, parent_name, time } = req.body;
+  const dateOnly = time.split('T')[0];
 
-  findStudentByName(student_name, grade, (err, student) => {
+  db.get('SELECT * FROM students WHERE id = ?', [student_id], (err, student) => {
     if (err || !student) return res.status(404).send({ error: 'Student not found' });
 
     db.serialize(() => {
-      // 1. Remove existing checkout on the same date
-      db.run(
-        `DELETE FROM checkouts 
-         WHERE student_id = ? AND DATE(time) = DATE(?)`,
-        [student.id, dateOnly],
-        function (err) {
-          if (err) {
-            console.error('Error deleting old checkout:', err);
-            return res.status(500).send({ error: 'Failed to reset checkout' });
-          }
+      db.run('DELETE FROM checkouts WHERE student_id = ? AND DATE(time) = DATE(?)',
+        [student_id, dateOnly], err => {
+        if (err) return res.status(500).send({ error: 'Failed to reset checkout' });
 
-          // 2. Insert new check-in
-          db.run(
-            `INSERT INTO checkins (student_id, time, checked_in_by) VALUES (?, ?, ?)`,
-            [student.id, time, parent_name],
-            function (err) {
-              if (err) {
-                console.error('Error inserting checkin:', err);
-                return res.status(500).send({ error: err.message });
-              }
-              res.send({ success: true, id: this.lastID });
-            }
-          );
-        }
-      );
+        db.run(
+          `INSERT INTO checkins (student_id, time, checked_in_by) VALUES (?, ?, ?)`,
+          [student_id, time, parent_name],
+          function(err) {
+            if (err) return res.status(500).send({ error: err.message });
+            res.send({ success: true, id: this.lastID });
+          }
+        );
+      });
     });
   });
 });
 
-
-// --- Check-Out ---
+// Checkout
 app.post('/checkout', (req, res) => {
-  const { student_name, parent_name, grade, time } = req.body;
+  const { student_id, parent_name, time } = req.body;
 
-  findStudentByName(student_name, grade, (err, student) => {
+  db.get('SELECT * FROM students WHERE id = ?', [student_id], (err, student) => {
     if (err || !student) return res.status(404).send({ error: 'Student not found' });
 
     db.run(
       `INSERT INTO checkouts (student_id, time, checked_out_by) VALUES (?, ?, ?)`,
-      [student.id, time, parent_name],
-      function (err) {
+      [student_id, time, parent_name],
+      function(err) {
         if (err) return res.status(500).send({ error: err.message });
         res.send({ success: true, id: this.lastID });
       }
@@ -139,117 +132,77 @@ app.post('/checkout', (req, res) => {
   });
 });
 
-// --- Teacher Dashboard ---
+// Teacher dashboard
 app.get('/teacher/checkin-status', (req, res) => {
   const date = req.query.date;
-  if (!date) return res.status(400).send({ error: 'Missing date query parameter' });
+  const dateOnly = date?.split('T')[0] ?? new Date().toISOString().split('T')[0];
 
-  // First, find latest check-in per student on the selected date
-  const checkinQuery = `
-    SELECT c1.student_id, c1.time, c1.checked_in_by
-    FROM checkins c1
-    JOIN (
-      SELECT student_id, MAX(time) as max_time
-      FROM checkins
-      WHERE DATE(time) = DATE(?)
-      GROUP BY student_id
-    ) c2 ON c1.student_id = c2.student_id AND c1.time = c2.max_time
+  const query = `
+    SELECT s.id, s.name AS student_name, s.grade, s.father_name, s.mother_name,
+           s.phone_number, s.wechat_id, s.email,
+           ci.time AS checkin_time, ci.checked_in_by,
+           co.time AS checkout_time, co.checked_out_by
+    FROM students s
+    LEFT JOIN (SELECT * FROM checkins WHERE DATE(time) = DATE(?)) ci ON s.id = ci.student_id
+    LEFT JOIN (SELECT * FROM checkouts WHERE DATE(time) = DATE(?)) co ON s.id = co.student_id
+    ORDER BY s.grade, s.name
   `;
 
-  db.all(checkinQuery, [date], (err, checkins) => {
+  db.all(query, [dateOnly, dateOnly], (err, rows) => {
     if (err) return res.status(500).send({ error: err.message });
-
-    const checkinMap = Object.fromEntries(checkins.map(c => [c.student_id, c]));
-
-    // For each check-in, find the first checkout *after* that check-in
-    const studentIds = Object.keys(checkinMap);
-    if (studentIds.length === 0) {
-      // No check-ins — return all students with "Not Checked In"
-      db.all('SELECT * FROM students', [], (err, students) => {
-        if (err) return res.status(500).send({ error: err.message });
-        const result = students.map(s => ({
-          id: s.id,
-          student_name: s.name,
-          grade: s.grade,
-          father_name: s.father_name,
-          mother_name: s.mother_name,
-          phone_number: s.phone_number,
-          wechat_id: s.wechat_id,
-          email: s.email,
-          status: 'Not Checked In',
-          checkin_time: null,
-          checked_in_by: null,
-          checkout_time: null,
-          checked_out_by: null
-        }));
-        return res.send(result);
-      });
-      return;
-    }
-
-    const placeholders = studentIds.map(() => '?').join(',');
-
-    const checkoutQuery = `
-      SELECT c1.student_id, c1.time, c1.checked_out_by
-      FROM checkouts c1
-      JOIN (
-        SELECT student_id, MIN(time) as min_time
-        FROM checkouts
-        WHERE student_id IN (${placeholders})
-        AND time > ?
-        GROUP BY student_id
-      ) c2 ON c1.student_id = c2.student_id AND c1.time = c2.min_time
-    `;
-
-    // Use the latest check-in time among all students as the lower bound
-    const minCheckinTime = Math.min(...checkins.map(c => new Date(c.time).getTime()));
-    const timeCutoff = new Date(minCheckinTime).toISOString();
-
-    db.all(checkoutQuery, [...studentIds, timeCutoff], (err, checkouts) => {
-      if (err) return res.status(500).send({ error: err.message });
-
-      const checkoutMap = Object.fromEntries(checkouts.map(c => [c.student_id, c]));
-
-      db.all('SELECT * FROM students', [], (err, students) => {
-        if (err) return res.status(500).send({ error: err.message });
-
-        const result = students.map(s => {
-          const ci = checkinMap[s.id];
-          const co = checkoutMap[s.id];
-          const status = ci
-            ? (co && new Date(co.time) > new Date(ci.time) ? 'Checked Out' : 'Checked In')
-            : 'Not Checked In';
-
-          return {
-            id: s.id,
-            student_name: s.name,
-            grade: s.grade,
-            father_name: s.father_name,
-            mother_name: s.mother_name,
-            phone_number: s.phone_number,
-            wechat_id: s.wechat_id,
-            email: s.email,
-            status,
-            checkin_time: ci?.time || null,
-            checked_in_by: ci?.checked_in_by || null,
-            checkout_time: co?.time || null,
-            checked_out_by: co?.checked_out_by || null,
-          };
-        });
-
-        res.send(result);
-      });
-    });
+    const withStatus = rows.map(r => ({
+      ...r,
+      status: r.checkin_time ? (r.checkout_time ? 'Checked Out' : 'Checked In') : 'Not Checked In'
+    }));
+    res.send(withStatus);
   });
 });
 
+// Get all students
+app.get('/students', (req, res) => {
+  const { grade, student_name } = req.query;
+  if (grade && student_name) {
+    db.all('SELECT * FROM students WHERE grade = ? AND name = ?', [grade, student_name], (err, rows) => {
+      if (err) return res.status(500).send({ error: err.message });
+      res.send(rows);
+    });
+  } else {
+    db.all('SELECT * FROM students', [], (err, rows) => {
+      if (err) return res.status(500).send({ error: err.message });
+      res.send(rows);
+    });
+  }
+});
 
+// Update student
+app.put('/students/:id', (req, res) => {
+  const id = req.params.id;
+  const { name, grade, father_name, mother_name, phone_number, wechat_id, email } = req.body;
+
+  db.run(`UPDATE students SET name=?, grade=?, father_name=?, mother_name=?, phone_number=?, wechat_id=?, email=? WHERE id=?`,
+    [name, grade, father_name, mother_name, phone_number, wechat_id, email, id],
+    function(err) {
+      if (err) return res.status(500).send({ error: err.message });
+      res.send({ success: true, changes: this.changes });
+    });
+});
+
+// Delete student
+app.delete('/students/:id', (req, res) => {
+  const studentId = req.params.id;
+  db.run('DELETE FROM checkins WHERE student_id = ?', [studentId]);
+  db.run('DELETE FROM checkouts WHERE student_id = ?', [studentId]);
+  db.run('DELETE FROM students WHERE id = ?', [studentId], function(err) {
+    if (err) return res.status(500).send({ error: err.message });
+    res.send({ success: true, deleted: this.changes });
+  });
+});
+
+// Export students
 app.get('/export/students', async (req, res) => {
   try {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Registered Students');
-
-    // Define headers
     worksheet.columns = [
       { header: 'ID', key: 'id', width: 10 },
       { header: 'Name', key: 'name', width: 20 },
@@ -263,14 +216,9 @@ app.get('/export/students', async (req, res) => {
 
     db.all('SELECT * FROM students', [], async (err, rows) => {
       if (err) return res.status(500).send({ error: err.message });
-
-      // Add rows
       rows.forEach(student => worksheet.addRow(student));
-
-      // Set headers for download
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename=students.xlsx');
-
       await workbook.xlsx.write(res);
       res.end();
     });
@@ -279,56 +227,11 @@ app.get('/export/students', async (req, res) => {
   }
 });
 
-app.get('/students', (req, res) => {
-  db.all('SELECT * FROM students', [], (err, rows) => {
-    if (err) return res.status(500).send({ error: err.message });
-    res.send(rows);
-  });
-});
-
-app.put('/students/:id', (req, res) => {
-  const id = req.params.id;
-  const {
-    name, grade, father_name, mother_name,
-    phone_number, wechat_id, email
-  } = req.body;
-
-  db.run(
-    `UPDATE students SET 
-      name = ?, grade = ?, father_name = ?, mother_name = ?, 
-      phone_number = ?, wechat_id = ?, email = ? 
-     WHERE id = ?`,
-    [name, grade, father_name, mother_name, phone_number, wechat_id, email, id],
-    function (err) {
-      if (err) return res.status(500).send({ error: err.message });
-      res.send({ success: true, changes: this.changes });
-    }
-  );
-});
-
-// --- Delete Student by ID ---
-app.delete('/students/:id', (req, res) => {
-  const studentId = req.params.id;
-
-  db.run(`DELETE FROM students WHERE id = ?`, [studentId], function (err) {
-    if (err) {
-      console.error('Error deleting student:', err);
-      return res.status(500).send({ error: err.message });
-    }
-
-    // Also remove checkin/checkout records to prevent orphan entries
-    db.run(`DELETE FROM checkins WHERE student_id = ?`, [studentId]);
-    db.run(`DELETE FROM checkouts WHERE student_id = ?`, [studentId]);
-
-    res.send({ success: true, deleted: this.changes });
-  });
-});
-
-// --- Root Check ---
+// Root check
 app.get('/', (req, res) => {
-  res.send('✅ Check-in System Backend is Running.');
+  res.send('✅ SQLite Check-in System Backend is Running.');
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`✅ Check-in Server (SQLite mode) started on port ${port}`);
 });

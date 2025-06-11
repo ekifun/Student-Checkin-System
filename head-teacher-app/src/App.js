@@ -11,13 +11,26 @@ function App() {
   const [editedStudent, setEditedStudent] = useState({});
 
   const fetchStudents = async () => {
-    const data = await fetch(`${API_BASE}/students`).then((res) => res.json());
-    setStudents(data);
-  };
+    try {
+      const data = await fetch(`${API_BASE}/students`)
+        .then((res) => res.json());
+  
+      if (Array.isArray(data)) {
+        setStudents(data);
+      } else {
+        console.error('Unexpected students data:', data);
+        setStudents([]); // fallback
+      }
+    } catch (err) {
+      console.error('Error fetching students:', err);
+      setStudents([]); // fallback on error
+    }
+  };  
 
   const fetchCheckins = async () => {
     try {
-      const res = await fetch(`${API_BASE}/teacher/checkin-status?date=${date}`);
+      const isoDate = new Date(date).toISOString().split('T')[0];
+      const res = await fetch(`${API_BASE}/teacher/checkin-status?date=${isoDate}`);
       const data = await res.json();
       setCheckins(data);
     } catch (err) {
@@ -55,7 +68,7 @@ function App() {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     try {
       const res = await fetch(`${API_BASE}/students/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete');
       await fetchStudents();
@@ -77,14 +90,16 @@ function App() {
 
       <label>
         Select Date:{' '}
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </label>
 
-      {Object.entries(groupedByGrade).map(([grade, students]) => (
+      <div style={{ marginTop: '1rem' }}>
+        <button onClick={() => { fetchStudents(); fetchCheckins(); }}>
+          🔄 Refresh
+        </button>
+      </div>
+
+      {Object.entries(groupedByGrade).map(([grade, checkinList]) => (
         <div key={grade} style={{ marginTop: '2rem' }}>
           <h2>Grade {grade}</h2>
           <table border="1" cellPadding="6" cellSpacing="0" width="100%">
@@ -99,7 +114,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {students.map((s) => (
+              {checkinList.map((s) => (
                 <tr key={s.id}>
                   <td>{s.student_name}</td>
                   <td>{s.status}</td>

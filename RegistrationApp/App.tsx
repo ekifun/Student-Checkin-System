@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 
 // Make sure to include the http:// and use your local IP address accessible from the phone
-const API_BASE = 'http://a3428ac49451640ffb9d0f66968d8224-344899087.us-west-1.elb.amazonaws.com';
+const API_BASE = 'http://3.101.139.46:3001';
+//const API_BASE = 'http://a3428ac49451640ffb9d0f66968d8224-344899087.us-west-1.elb.amazonaws.com';
 
 export default function App() {
   const [form, setForm] = useState({
@@ -33,18 +34,43 @@ export default function App() {
       Alert.alert('Error', 'Please fill in all required fields.');
       return;
     }
-
-    const payload = {
-      student_name: form.studentName,
-      grade: form.grade,
-      father_name: form.fatherName,
-      mother_name: form.motherName,
-      phone_number: form.phone,
-      wechat_id: form.wechat,
-      email: form.email,
-    };
-
+  
     try {
+      // Step 1: Check if student already exists
+      const checkRes = await axios.get(`${API_BASE}/students`, {
+        params: {
+          grade: form.grade.trim().toUpperCase(),
+          student_name: form.studentName
+        }
+      });
+  
+      const existing = checkRes.data || [];
+      let finalStudentName = form.studentName;
+
+      if (existing.length > 0) {
+        const isExactDuplicate = existing.some(
+          s => s.father_name === form.fatherName && s.mother_name === form.motherName
+        );
+      
+        if (isExactDuplicate) {
+          Alert.alert('Duplicate', 'This student is already registered.');
+          return;
+        } else {
+          // Same name, same grade, different parents → add suffix
+          finalStudentName = `${form.studentName} (${form.fatherName})`;
+        }
+      }      
+
+      const payload = {
+        student_name: finalStudentName,
+        grade: form.grade,
+        father_name: form.fatherName,
+        mother_name: form.motherName,
+        phone_number: form.phone,
+        wechat_id: form.wechat,
+        email: form.email,
+      };
+  
       const res = await axios.post(`${API_BASE}/register`, payload);
       if (res.data.id) {
         Alert.alert('Success', 'Student registered successfully.');
@@ -62,7 +88,12 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error during registration:', err.message);
-      Alert.alert('Network Error', 'Failed to connect to server.');
+      console.log('Full error:', err);  // Add this line
+      if (err.response && err.response.data && err.response.data.error) {
+        Alert.alert('Registration Error', err.response.data.error);
+      } else {
+        Alert.alert('Network Error', 'Failed to connect to server.');
+      }
     }
   };
 
@@ -86,8 +117,8 @@ export default function App() {
             >
               <Picker.Item label="Select Grade..." value="" />
               <Picker.Item label="7+" value="7+" />
-              <Picker.Item label="<3" value="<3" />
-              <Picker.Item label="Prek" value="Prek" />
+              <Picker.Item label="Nursery (<3 yr)" value="<3" />
+              <Picker.Item label="Pre-K (≥3 yr)" value="Prek" />
               <Picker.Item label="K-3" value="K-3" />
               <Picker.Item label="4-6" value="4-6" />
             </Picker>

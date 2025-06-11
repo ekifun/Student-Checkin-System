@@ -11,7 +11,9 @@ import {
 import axios from 'axios';
 import { Picker } from '@react-native-picker/picker';
 
-const API_BASE = 'http://a3428ac49451640ffb9d0f66968d8224-344899087.us-west-1.elb.amazonaws.com';
+//const API_BASE = 'http://a3428ac49451640ffb9d0f66968d8224-344899087.us-west-1.elb.amazonaws.com';
+const API_BASE = 'http://3.101.139.46:3001';
+
 const GRADE_OPTIONS = ['7+', '<3', 'Prek', 'K-3', '4-6'];
 
 export default function App() {
@@ -31,7 +33,18 @@ export default function App() {
   const fetchStudents = async () => {
     try {
       const res = await axios.get(`${API_BASE}/teacher/checkin-status?date=${today}`);
-      setStudents(res.data.filter(s => s.grade === grade));
+      const studentsRaw = res.data.filter(s => s.grade === grade);
+
+      // Remove duplicate students with same ID
+      const uniqueStudents = Object.values(
+        studentsRaw.reduce((acc, cur) => {
+          acc[cur.id] = cur;
+          return acc;
+        }, {})
+      );
+
+      setStudents(uniqueStudents);
+      console.log('Fetched students:', res.data);
     } catch (err) {
       Alert.alert('Error', 'Failed to fetch student list.');
     }
@@ -45,12 +58,19 @@ export default function App() {
 
   const submitAction = async (student, parentName) => {
     try {
-      await axios.post(`${API_BASE}/${actionType}`, {
+      console.log(`POST ${API_BASE}/${actionType}`, {
         student_name: student.student_name,
         parent_name: parentName,
         grade: student.grade,
         time: new Date().toISOString(),
       });
+      
+      await axios.post(`${API_BASE}/${actionType}`, {
+        student_id: student.id,
+        parent_name: parentName,
+        time: new Date().toISOString(),
+      });
+      
   
       if (actionType === 'checkin') {
         // If re-checkin, optimistically reset checkout fields in frontend before refresh
@@ -62,6 +82,7 @@ export default function App() {
       setActiveStudentId(null);
       await fetchStudents(); // Ensures UI reflects backend truth
     } catch (err) {
+      console.error('Submit error:', err?.response?.data || err.message);
       Alert.alert('Error', 'Failed to submit action.');
     }
   };
