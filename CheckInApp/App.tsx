@@ -12,9 +12,9 @@ import axios from 'axios';
 import { Picker } from '@react-native-picker/picker';
 
 //const API_BASE = 'http://a3428ac49451640ffb9d0f66968d8224-344899087.us-west-1.elb.amazonaws.com';
-const API_BASE = 'http://3.101.139.46:3001';
+const API_BASE = 'http://13.52.104.212:3001';
 
-const GRADE_OPTIONS = ['7+', '<3', 'Prek', 'K-3', '4-6'];
+const GRADE_OPTIONS = ['7+', 'Nursery', 'PreK', 'K-3', '4-6'];
 
 export default function App() {
   const [students, setStudents] = useState([]);
