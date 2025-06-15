@@ -13,7 +13,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // SQLite DB file location
-const dbFile = path.resolve(__dirname, 'data', 'checkin-system.db');
+const dbFile = path.resolve(__dirname, 'data', 'student_checkin_system_imported.db');
 const db = new sqlite3.Database(dbFile);
 
 // Initialize tables
@@ -90,7 +90,7 @@ app.post('/register', (req, res) => {
 
 // Check-in
 app.post('/checkin', (req, res) => {
-  const { student_id, parent_name, time } = req.body;
+  const { student_id, parent_name, time, pickup_person_name } = req.body;
   const dateOnly = time.split('T')[0];
 
   db.get('SELECT * FROM students WHERE id = ?', [student_id], (err, student) => {
@@ -103,7 +103,7 @@ app.post('/checkin', (req, res) => {
 
         db.run(
           `INSERT INTO checkins (student_id, time, checked_in_by) VALUES (?, ?, ?)`,
-          [student_id, time, parent_name],
+          [student_id, time, pickup_person_name ? `父母委托人: ${pickup_person_name}` : parent_name],
           function(err) {
             if (err) return res.status(500).send({ error: err.message });
             res.send({ success: true, id: this.lastID });
@@ -116,14 +116,14 @@ app.post('/checkin', (req, res) => {
 
 // Checkout
 app.post('/checkout', (req, res) => {
-  const { student_id, parent_name, time } = req.body;
+  const { student_id, parent_name, time, pickup_person_name } = req.body;
 
   db.get('SELECT * FROM students WHERE id = ?', [student_id], (err, student) => {
     if (err || !student) return res.status(404).send({ error: 'Student not found' });
 
     db.run(
-      `INSERT INTO checkouts (student_id, time, checked_out_by) VALUES (?, ?, ?)`,
-      [student_id, time, parent_name],
+      `INSERT INTO checkouts (student_id, time, checked_out_by, pickup_person_name) VALUES (?, ?, ?, ?)`,
+      [student_id, time, parent_name, pickup_person_name],
       function(err) {
         if (err) return res.status(500).send({ error: err.message });
         res.send({ success: true, id: this.lastID });
@@ -139,9 +139,9 @@ app.get('/teacher/checkin-status', (req, res) => {
 
   const query = `
     SELECT s.id, s.name AS student_name, s.grade, s.father_name, s.mother_name,
-           s.phone_number, s.wechat_id, s.email,
+           s.phone_number, s.wechat_id, s.email, s.authorized_pickup_person,
            ci.time AS checkin_time, ci.checked_in_by,
-           co.time AS checkout_time, co.checked_out_by
+           co.time AS checkout_time, co.checked_out_by, co.pickup_person_name
     FROM students s
     LEFT JOIN (SELECT * FROM checkins WHERE DATE(time) = DATE(?)) ci ON s.id = ci.student_id
     LEFT JOIN (SELECT * FROM checkouts WHERE DATE(time) = DATE(?)) co ON s.id = co.student_id
@@ -177,10 +177,10 @@ app.get('/students', (req, res) => {
 // Update student
 app.put('/students/:id', (req, res) => {
   const id = req.params.id;
-  const { name, grade, father_name, mother_name, phone_number, wechat_id, email } = req.body;
+  const { name, grade, father_name, mother_name, phone_number, wechat_id, email, authorized_pickup_person } = req.body;
 
-  db.run(`UPDATE students SET name=?, grade=?, father_name=?, mother_name=?, phone_number=?, wechat_id=?, email=? WHERE id=?`,
-    [name, grade, father_name, mother_name, phone_number, wechat_id, email, id],
+  db.run(`UPDATE students SET name=?, grade=?, father_name=?, mother_name=?, phone_number=?, wechat_id=?, email=?, authorized_pickup_person=? WHERE id=?`,
+    [name, grade, father_name, mother_name, phone_number, wechat_id, email, authorized_pickup_person, id],
     function(err) {
       if (err) return res.status(500).send({ error: err.message });
       res.send({ success: true, changes: this.changes });
