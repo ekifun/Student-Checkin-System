@@ -1,55 +1,100 @@
-🎓 Student-Checkin-System
+# 🎓 Student-Checkin-System
 
-A complete mobile and backend system for managing student check-ins and check-outs, designed for teachers and administrators. This repository contains the backend service and a React Native mobile app.
-🗂 Project Structure
+A complete mobile and backend system for managing student check‑ins and check‑outs, designed for teachers and administrators. This repository contains:
+
+- 📦 `student-checkin-backend/`: Node.js + PostgreSQL backend service  
+- 📱 `CheckInApp/`: React Native frontend app built with Expo  
+
+---
+
+## 🗂 Project Structure
+
 Student-Checkin-System/
-├── student-checkin-backend/      # Node.js + PostgreSQL backend
-└── CheckInApp/                   # React Native frontend (via Expo)
-⚙️ Backend Deployment
-1. Deploy Backend Server
-cd Student-Checkin-System/student-checkin-backend
+├── student-checkin-backend/ # Backend (Node.js + PostgreSQL)
+└── CheckInApp/ # Frontend (Expo + React Native)
+
+
+---
+
+## ⚙️ Backend Deployment
+
+Step 1: Deploy Backend Server
+```bash
+cd student-checkin-backend
 sh deploy.sh
+```
+
 This will:
 Install dependencies
 Launch the backend server
 Configure PostgreSQL and run migrations
-📱 Run the Mobile App (iPhone)
-1. Install Expo CLI
+
+## 📱 Run the Mobile App (iPhone)
+
+Step 1: Install Expo CLI
+```bash
 npm install -g expo-cli
-2. Initialize the App
+```
+
+Step 2: Initialize the App
+```bash
 expo init CheckInApp
 cd CheckInApp
-Replace App.js with your version of the app code.
-3. Install App Dependencies
+```
+Replace App.js with your provided version of the app code.
+
+
+Step 3: Install Dependencies
+```bash
 npm install axios @react-native-community/datetimepicker
-4. Start the App with Expo
+```
+
+Step 4: Start the App with Expo
+```bash
 expo start
-Install Expo Go on your iPhone from the App Store
-Scan the QR code shown in your terminal or browser to launch the app
+```
+
+Then:
+Install Expo Go from the App Store on your iPhone
+Scan the QR code in the terminal or browser to launch the app
+
 🌍 Tunnel Mode for LAN Access
-To expose the app over the internet (e.g., if your iPhone is on a different network):
+To make your local app reachable from other networks:
+```bash
 npx expo start --tunnel
-The QR code will start with exp://exp.host/...
-Requires login with an Expo account inside Expo Go
-🔁 Keep Expo Running (Optional)
-To ensure Expo remains running in the background:
+```
+QR code begins with exp://exp.host/...
+Requires login within Expo Go
+
+🔁 Keep Expo Running in Background (Optional)
+```bash
 npm install -g pm2
 pm2 start "npx expo start --tunnel" --name checkin-app
 pm2 save
 pm2 startup
+```
+
 🚀 Advanced Deployment: Fixed QR Code via EAS Update
-Expo CLI has migrated to EAS Update, which provides a permanent QR code for your app. Here’s how to set it up:
-1. Install EAS CLI
+Expo CLI now uses EAS Update to generate a permanent public QR code.
+
+Step 1: Install EAS CLI
+```bash
 npm install -g eas-cli
-2. Login to Expo
+```
+
+Step 2: Login to Expo
+```bash
 eas login
-3. Initialize EAS Project
+```
+
+Step 3: Initialize EAS Project
+```bash
 eas init
-Choose the Managed workflow. This creates an eas.json file:
+```
+Choose Managed when prompted. This creates eas.json:
+```bash
 {
-  "cli": {
-    "version": ">= 3.0.0"
-  },
+  "cli": { "version": ">= 3.0.0" },
   "build": {
     "development": {},
     "preview": {},
@@ -59,34 +104,41 @@ Choose the Managed workflow. This creates an eas.json file:
     "url": "https://u.expo.dev/YOUR_PROJECT_ID"
   }
 }
-4. Configure app.json or app.config.js
-Make sure your app’s config includes:
+```
+
+Step 4: Add Update Config in App Config
+In app.json or app.config.js:
+```bash
 {
   "expo": {
     "name": "RegistrationApp",
     "slug": "RegistrationApp",
-    "runtimeVersion": {
-      "policy": "sdkVersion"
-    },
+    "runtimeVersion": { "policy": "sdkVersion" },
     "updates": {
       "url": "https://u.expo.dev/21f67a57-176d-4931-a29a-497e9ddce786"
     }
   }
 }
-Replace the URL with your actual PROJECT_ID. You’ll find this in your Expo dashboard.
-5. Publish the App
+```
+Replace the URL with your real project ID from your Expo dashboard.
+
+Step 5: Publish with EAS Update
+```bash
 eas update --branch main --message "Initial public QR code release"
-This returns a permanent shareable link, e.g.:
+```
+You'll get a shareable link, e.g.:
 https://expo.dev/updates/21f67a57-176d-4931-a29a-497e9ddce786
-6. Generate a QR Code (Optional)
-Use a free QR code generator, or:
+
+Step 6: (Optional) Generate a QR Code
 qrencode -o qr.png "https://expo.dev/updates/21f67a57-176d-4931-a29a-497e9ddce786"
-7. Scan in Expo Go
-Open Expo Go on your iPhone
-Scan the generated QR code
-Your app loads directly with the fixed public link
+
+Step 7: Scan in Expo Go
+Open Expo Go on your mobile device
+Scan the QR code
+Your app will load directly from the fixed QR link 🎉
+
 ✅ Summary
-Task	Tool	Result
-Start local app	expo start	Temporary QR for local dev
-Share over internet	--tunnel	Temporary public QR
-Publish with permanent QR	eas update	Fixed QR for long-term sharing
+Task	Command/Tool	Result
+Start local app	expo start	Temporary QR for local development
+Share over internet	npx expo start --tunnel	Temporary public QR
+Publish with fixed QR	eas update	Stable QR for public distribution
