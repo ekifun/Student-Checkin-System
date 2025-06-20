@@ -142,3 +142,7 @@ Task	Command/Tool	Result
 Start local app	expo start	Temporary QR for local development
 Share over internet	npx expo start --tunnel	Temporary public QR
 Publish with fixed QR	eas update	Stable QR for public distribution
+
+
+🚀 Deployment guide for Kubernetes manifests
+https://docs.google.com/document/d/1-6doPPlfsS5uo5E0WcdUmzp4KGoXXDSiMCURUboqAD0/edit?usp=sharing
