@@ -1,17 +1,26 @@
-# Dockerfile
+# Use official Node.js LTS image
 FROM node:18
 
+# Set working directory
 WORKDIR /app
 
+# Copy package definition files first for better build caching
 COPY package*.json ./
-RUN npm install
 
+# Install dependencies
+RUN npm install --production
+
+# Copy rest of the app source
 COPY . .
 
-# Create data directory
+# Ensure data directory exists (used by SQLite or export)
 RUN mkdir -p /app/data
 
-EXPOSE 3001
+# Use environment variable for port (optional best practice)
+ENV PORT=3001
 
+# Expose port
+EXPOSE ${PORT}
+
+# Start server
 CMD ["node", "server.js"]
-

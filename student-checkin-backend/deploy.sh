@@ -27,7 +27,7 @@ else
   echo "✅ Docker Compose is installed."
 fi
 
-# 2.5️⃣ Validate .env file
+# 3️⃣ Validate .env file
 echo "🔍 Checking .env file before build..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,45 +55,54 @@ done
 
 echo "✅ All required .env variables are present."
 
-# 2.6️⃣ Ensure package.json and package-lock.json exist
+# 4️⃣ Ensure package.json and package-lock.json exist
 echo "📦 Checking package.json and package-lock.json..."
 
-if [ ! -f "$SCRIPT_DIR/package.json" ] || [ ! -f "$SCRIPT_DIR/package-lock.json" ]; then
+cd "$SCRIPT_DIR"
+
+if [ ! -f "package.json" ] || [ ! -f "package-lock.json" ]; then
   echo "📦 package.json or package-lock.json not found — generating fresh ones..."
 
-  cd "$SCRIPT_DIR"
-
-  # Clean old node_modules if any
   rm -rf node_modules package*.json
 
   # Generate new package.json
   npm init -y
 
-  # Install backend dependencies
-  npm install express body-parser sqlite3 cors dotenv nodemailer
+  # Install all backend dependencies at once
+  npm install express body-parser sqlite3 cors dotenv nodemailer exceljs
 
   echo "✅ package.json and dependencies created."
 else
   echo "✅ package.json and package-lock.json found."
 fi
 
+# 5️⃣ Clean local node_modules before Docker build
 echo "🧹 Cleaning up host node_modules (if any)..."
 rm -rf node_modules
 
-# 3️⃣ Build Docker image
+# 6️⃣ Build Docker image
 echo "👉 Building Docker image..."
 docker-compose build
 
-# 4️⃣ Stop running containers
-echo "👉 Stopping any running containers..."
+# 7️⃣ Stop existing containers
+echo "🛑 Stopping any running containers..."
 docker-compose down
 
-# 5️⃣ Start fresh containers
-echo "👉 Starting fresh containers..."
+# 8️⃣ Start fresh containers
+echo "🚀 Starting fresh containers..."
 docker-compose up -d
 
-# 6️⃣ Show Docker status
+# 9️⃣ Show container status
 echo "✅ Deployment complete!"
 docker ps
+
+# 🔟 Optional: Health check
+echo "🔍 Verifying backend is up..."
+sleep 3
+if curl -sf http://localhost:3001/students > /dev/null; then
+  echo "✅ Backend is running and reachable at http://localhost:3001"
+else
+  echo "⚠️ Warning: Backend is not responding on http://localhost:3001"
+fi
 
 echo "🎯 Deployment Finished Successfully!"
