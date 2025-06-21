@@ -2,7 +2,7 @@
   "expo": {
     "name": "CheckInApp",
     "slug": "CheckInApp",
-    "version": "1.0.0",
+    "owner": "johnliu17",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.johnliu17.CheckInApp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +28,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a7fdc38a-1bd0-46f2-ac78-990d634509a9"
+      }
     }
   }
 }
