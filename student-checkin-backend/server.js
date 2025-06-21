@@ -233,5 +233,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`✅ Check-in Server (CI/CD SQLite mode) started on port ${port}`);
+  console.log(`✅ Check-in Server (CI/CD test SQLite mode) started on port ${port}`);
 });
