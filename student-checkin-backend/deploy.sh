@@ -76,23 +76,28 @@ else
   echo "✅ package.json and package-lock.json found."
 fi
 
-# 5️⃣ Clean local node_modules before Docker build
+# 5️⃣ Auto pull latest code from GitHub
+echo "🔄 Pulling latest code from GitHub..."
+git reset --hard HEAD
+git pull origin main || echo "⚠️ Git pull failed — check remote status."
+
+# 6️⃣ Clean local node_modules before Docker build
 echo "🧹 Cleaning up host node_modules (if any)..."
 rm -rf node_modules
 
-# 6️⃣ Build Docker image
+# 7️⃣ Build Docker image
 echo "👉 Building Docker image..."
 docker-compose build
 
-# 7️⃣ Stop existing containers
+# 8️⃣ Stop existing containers
 echo "🛑 Stopping any running containers..."
 docker-compose down
 
-# 8️⃣ Start fresh containers
+# 9️⃣ Start fresh containers
 echo "🚀 Starting fresh containers..."
 docker-compose up -d
 
-# 🧩 Step: Ensure DB schema is up to date
+# 🔟 DB Schema Migration
 echo "🧩 Ensuring database schema is updated (e.g., authorized_pickup_person)..."
 
 DB_PATH="$SCRIPT_DIR/data/student_checkin_system_imported.db"
@@ -111,12 +116,11 @@ else
   echo "⚠️ Database not found at $DB_PATH. Skipping migration."
 fi
 
-
-# 9️⃣ Show container status
+# 11️⃣ Show container status
 echo "✅ Deployment complete!"
 docker ps
 
-# 🔟 Optional: Health check
+# 12️⃣ Optional: Health check
 echo "🔍 Verifying backend is up..."
 sleep 3
 if curl -sf http://localhost:3001/students > /dev/null; then
