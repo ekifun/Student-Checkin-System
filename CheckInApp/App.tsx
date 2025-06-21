@@ -13,7 +13,7 @@ import axios from 'axios';
 import { Picker } from '@react-native-picker/picker';
 
 // Backend API address (adjust to your server IP)
-const API_BASE = 'http://192.168.1.73:3001';
+const API_BASE = 'http://54.241.242.159:3001';
 
 const GRADE_OPTIONS = ['7+', 'Nursery', 'PreK', 'K-3', '4-6'];
 

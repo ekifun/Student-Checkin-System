@@ -11,8 +11,7 @@ import {
 } from 'react-native';
 
 // Make sure to include the http:// and use your local IP address accessible from the phone
-const API_BASE = 'http://13.52.104.212:3001';
-//const API_BASE = 'http://a3428ac49451640ffb9d0f66968d8224-344899087.us-west-1.elb.amazonaws.com';
+const API_BASE = 'http://54.241.242.159:3001';
 
 export default function App() {
   const [form, setForm] = useState({
