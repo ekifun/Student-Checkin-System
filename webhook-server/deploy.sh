@@ -1,23 +1,27 @@
 #!/bin/bash
 
-# Deploy script for webhook server
-
 set -e
 
 echo "🚀 Starting Webhook Server Deployment..."
 
-cd "$(dirname "$0")"  # go to webhook-server directory
+cd "$(dirname "$0")"
 
-# 1️⃣ Ensure dependencies are installed
-if [ ! -d "node_modules" ]; then
-  echo "📦 Installing dependencies..."
-  npm install
-else
-  echo "✅ Dependencies already installed."
+# 1️⃣ Initialize package.json if missing
+if [ ! -f "package.json" ]; then
+  echo "📦 Creating package.json..."
+  npm init -y
+  echo "🛠 Updating basic fields..."
+  jq '.name="webhook-server" | .version="1.0.0" | .main="server.js"' package.json > tmp.$$.json && mv tmp.$$.json package.json
 fi
 
-# 2️⃣ Start the server (as background service or with PM2)
-echo "🟢 Starting server.js..."
-nohup node server.js > webhook.log 2>&1 &
+# 2️⃣ Install express if not already installed
+if ! npm list express &>/dev/null; then
+  echo "📥 Installing express..."
+  npm install express
+else
+  echo "✅ express already installed."
+fi
 
-echo "✅ Webhook server started and logging to webhook.log"
+# 3️⃣ Start the server
+echo "🚦 Starting server.js..."
+node server.js
