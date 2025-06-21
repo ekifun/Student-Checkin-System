@@ -92,6 +92,26 @@ docker-compose down
 echo "🚀 Starting fresh containers..."
 docker-compose up -d
 
+# 🧩 Step: Ensure DB schema is up to date
+echo "🧩 Ensuring database schema is updated (e.g., authorized_pickup_person)..."
+
+DB_PATH="$SCRIPT_DIR/data/student_checkin_system_imported.db"
+
+if [ -f "$DB_PATH" ]; then
+  echo "🔍 Checking for authorized_pickup_person column..."
+
+  if ! sqlite3 "$DB_PATH" "PRAGMA table_info(students);" | grep -q authorized_pickup_person; then
+    echo "➕ Adding authorized_pickup_person column to students table..."
+    sqlite3 "$DB_PATH" "ALTER TABLE students ADD COLUMN authorized_pickup_person TEXT;"
+    echo "✅ Column added."
+  else
+    echo "✅ authorized_pickup_person column already exists."
+  fi
+else
+  echo "⚠️ Database not found at $DB_PATH. Skipping migration."
+fi
+
+
 # 9️⃣ Show container status
 echo "✅ Deployment complete!"
 docker ps

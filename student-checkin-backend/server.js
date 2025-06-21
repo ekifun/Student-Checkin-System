@@ -16,6 +16,46 @@ app.use(bodyParser.json());
 const dbFile = path.resolve(__dirname, 'data', 'student_checkin_system_imported.db');
 const db = new sqlite3.Database(dbFile);
 
+// Automated schema migration for required columns
+function ensureSchema() {
+  const alterStatements = [
+    {
+      table: 'students',
+      column: 'authorized_pickup_person',
+      type: 'TEXT'
+    },
+    {
+      table: 'checkouts',
+      column: 'pickup_person_name',
+      type: 'TEXT'
+    }
+  ];
+
+  alterStatements.forEach(({ table, column, type }) => {
+    db.all(`PRAGMA table_info(${table})`, (err, columns) => {
+      if (err) {
+        console.error(`❌ Error reading schema for table ${table}:`, err.message);
+        return;
+      }
+
+      const exists = columns.some(col => col.name === column);
+      if (!exists) {
+        const alterSQL = `ALTER TABLE ${table} ADD COLUMN ${column} ${type}`;
+        db.run(alterSQL, (err) => {
+          if (err) {
+            console.error(`❌ Failed to add column '${column}' to table '${table}':`, err.message);
+          } else {
+            console.log(`✅ Added missing column '${column}' to '${table}'`);
+          }
+        });
+      }
+    });
+  });
+}
+
+// Call the schema check immediately
+ensureSchema();
+
 // Initialize tables
 const initSQL = `
 CREATE TABLE IF NOT EXISTS students (
@@ -137,6 +177,10 @@ app.get('/teacher/checkin-status', (req, res) => {
   const date = req.query.date;
   const dateOnly = date?.split('T')[0] ?? new Date().toISOString().split('T')[0];
 
+  console.log('📅 [Request] /teacher/checkin-status');
+  console.log('🔍 Raw date query:', date);
+  console.log('📆 Normalized dateOnly:', dateOnly);
+
   const query = `
     SELECT s.id, s.name AS student_name, s.grade, s.father_name, s.mother_name,
            s.phone_number, s.wechat_id, s.email, s.authorized_pickup_person,
@@ -149,14 +193,26 @@ app.get('/teacher/checkin-status', (req, res) => {
   `;
 
   db.all(query, [dateOnly, dateOnly], (err, rows) => {
-    if (err) return res.status(500).send({ error: err.message });
+    if (err) {
+      console.error('❌ DB Query Error:', err.message);
+      return res.status(500).send({ error: err.message });
+    }
+
+    console.log(`✅ Query returned ${rows.length} rows from students/checkins/checkouts`);
+    if (rows.length > 0) {
+      console.log('📋 Sample student row:', rows[0]);
+    }
+
     const withStatus = rows.map(r => ({
       ...r,
       status: r.checkin_time ? (r.checkout_time ? 'Checked Out' : 'Checked In') : 'Not Checked In'
     }));
+
+    console.log('✅ Status computation complete. First result with status:', withStatus[0]);
     res.send(withStatus);
   });
 });
+
 
 // Get all students
 app.get('/students', (req, res) => {
