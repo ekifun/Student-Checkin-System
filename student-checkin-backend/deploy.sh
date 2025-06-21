@@ -55,6 +55,31 @@ done
 
 echo "✅ All required .env variables are present."
 
+# 2.6️⃣ Ensure package.json and package-lock.json exist
+echo "📦 Checking package.json and package-lock.json..."
+
+if [ ! -f "$SCRIPT_DIR/package.json" ] || [ ! -f "$SCRIPT_DIR/package-lock.json" ]; then
+  echo "📦 package.json or package-lock.json not found — generating fresh ones..."
+
+  cd "$SCRIPT_DIR"
+
+  # Clean old node_modules if any
+  rm -rf node_modules package*.json
+
+  # Generate new package.json
+  npm init -y
+
+  # Install backend dependencies
+  npm install express body-parser sqlite3 cors dotenv nodemailer
+
+  echo "✅ package.json and dependencies created."
+else
+  echo "✅ package.json and package-lock.json found."
+fi
+
+echo "🧹 Cleaning up host node_modules (if any)..."
+rm -rf node_modules
+
 # 3️⃣ Build Docker image
 echo "👉 Building Docker image..."
 docker-compose build
