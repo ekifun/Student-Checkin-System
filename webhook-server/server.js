@@ -16,7 +16,7 @@ app.post('/webhook', (req, res) => {
   if (event === 'push') {
     console.log('📦 Push received — triggering deployment...');
 
-    exec('cd ~/Student-Checkin-System/student-checkin-backend && ./deploy.sh', (err, stdout, stderr) => {
+    exec('cd ~/Student-Checkin-System/student-checkin-backend && chmod +x ./deploy.sh && ./deploy.sh', (err, stdout, stderr) => {
       if (err) {
         console.error('❌ Deployment error:', stderr);
         return res.status(500).send('Deployment failed');
